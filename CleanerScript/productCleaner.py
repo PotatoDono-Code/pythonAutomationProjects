@@ -37,7 +37,11 @@ ddf['Price Per Unit'] = merged_df['price'].combine_first(merged_df["Price Per Un
 print(ddf['Price Per Unit'].value_counts())
 
 # -- Remove rows where price values are unrecoverable
-ddf = ddf.drop(ddf[ddf['Price Per Unit'].isna() & ddf['Quantity'].isna() & ddf['Total Spent'].isna()].index)
+ur_col = ['Price Per Unit', 'Quantity', 'Total Spent', 'Item']
+ur_df = ddf[ur_col].isna()
+unrecoverable_mask = (ur_df.sum(axis=1) >= 3)
+
+ddf = ddf.drop(ddf[unrecoverable_mask].index)
 
 print(ddf.info())
 
