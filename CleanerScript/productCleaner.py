@@ -67,10 +67,18 @@ print(ddf.sample(15))
 df_mode = (ddf.groupby('Price Per Unit')['Item'].agg(lambda x : x.mode().iloc[0] if not x.mode().empty else None))
 ddf['Item'] = ddf['Item'].combine_first(ddf['Price Per Unit'].map(df_mode))
 
+# -- If remaining values have NaN Quantity, replace with 1 and recalcuate total
+no_qty_mask = ddf['Quantity'].isna()
+ddf.loc[no_qty_mask, 'Quantity'] = 1
+ddf.loc[no_qty_mask, 'Total Spent'] = ddf.loc[no_qty_mask, 'Price Per Unit']
+
+
 print(ddf.info())
 print(ddf.sample(15))
 
 print(ddf[ddf['Price Per Unit'].isna()])
+print(ddf[ddf['Quantity'].isna()])
+print(ddf[ddf['Total Spent'].isna()])
 
 
 # print(merged_df.head())
