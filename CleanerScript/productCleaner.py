@@ -12,22 +12,34 @@ rt = pd.DataFrame({
     'price' : [2, 1.5, 4, 5, 3, 1, 4, 3]
 })
 
+print(ddf.info())
+
 # -- Numerical Values to Floats
 cols = ['Price Per Unit', 'Quantity', 'Total Spent']
 ddf[cols] = ddf[cols].apply(pd.to_numeric, errors='coerce')
+
+print(ddf[cols].dtypes)
 
 # -- Replace all Non-Standard items with NaN
 ddf['Item'] = ddf['Item'].where(ddf["Item"].isin(rt["item"]))
 replaced_item_mask = ddf['Price Per Unit'].isin(rt['price'])
 ddf['Price Per Unit'] = ddf['Price Per Unit'].where(replaced_item_mask)
 
+print(ddf['Item'].unique())
+print(ddf['Price Per Unit'].unique())
+
+print(ddf['Price Per Unit'].value_counts())
 
 # -- Update Price Via Reference Table
 merged_df = ddf.merge(rt, how='left', left_on='Item', right_on='item')
 ddf['Price Per Unit'] = merged_df['price'].combine_first(merged_df["Price Per Unit"])
 
+print(ddf['Price Per Unit'].value_counts())
+
 # -- Remove rows where price values are unrecoverable
 ddf = ddf.drop(ddf[ddf['Price Per Unit'].isna() & ddf['Quantity'].isna() & ddf['Total Spent'].isna()].index)
+
+print(ddf.info())
 
 # -- Recover Price/Quantity/Total
 no_price_mask = (ddf['Price Per Unit'].isna() & ddf['Quantity'].notna() & ddf['Total Spent'].notna())
@@ -44,9 +56,18 @@ bad_math_no_price = (ddf['Price Per Unit'] * ddf['Quantity'] != ddf['Total Spent
 ddf.loc[bad_math_mask, ['Price Per Unit']] = ddf.loc[bad_math_mask, 'Total Spent'] / ddf.loc[bad_math_mask, 'Quantity']
 ddf.loc[bad_math_no_price, ['Total Spent']] = ddf.loc[bad_math_no_price, 'Price Per Unit'] * ddf.loc[bad_math_no_price, 'Quantity']
 
+print(ddf.info())
+print(ddf.sample(15))
+
 # -- Determine most common item by unit price, and replace null values with mode
 df_mode = (ddf.groupby('Price Per Unit')['Item'].agg(lambda x : x.mode().iloc[0] if not x.mode().empty else None))
 ddf['Item'] = ddf['Item'].combine_first(ddf['Price Per Unit'].map(df_mode))
+
+print(ddf.info())
+print(ddf.sample(15))
+
+print(ddf[ddf['Price Per Unit'].isna()])
+
 
 # print(merged_df.head())
 
