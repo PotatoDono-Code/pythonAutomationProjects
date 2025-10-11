@@ -72,14 +72,20 @@ no_qty_mask = ddf['Quantity'].isna()
 ddf.loc[no_qty_mask, 'Quantity'] = 1
 ddf.loc[no_qty_mask, 'Total Spent'] = ddf.loc[no_qty_mask, 'Price Per Unit']
 
+# print(ddf.info())
+# print(ddf.sample(15))
 
-print(ddf.info())
-print(ddf.sample(15))
+# print(ddf[ddf['Price Per Unit'].isna()])
+# print(ddf[ddf['Quantity'].isna()])
+# print(ddf[ddf['Total Spent'].isna()])
 
-print(ddf[ddf['Price Per Unit'].isna()])
-print(ddf[ddf['Quantity'].isna()])
-print(ddf[ddf['Total Spent'].isna()])
+# -- Replace Invalid Methods with Mode
+ddf["Payment Method"] = ddf["Payment Method"].where(ddf['Payment Method'].isin(['Credit Card', 'Cash', 'Digital Wallet']))
+pm_mode = ddf['Payment Method'].mode().iloc[0]
+print(pm_mode)
+ddf.loc[ddf['Payment Method'].isna(), 'Payment Method'] = pm_mode
 
+print(ddf['Payment Method'].unique())
 
 # print(merged_df.head())
 
