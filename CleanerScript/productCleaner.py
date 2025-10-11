@@ -111,6 +111,12 @@ print(ddf['Location'].value_counts())
 
 print(ddf.info())
 
+# -- Date Cleaning
+dates = pd.to_datetime(ddf['Transaction Date'], errors= 'coerce')
+dates = dates.ffill()
+ddf['Transaction Date'] = dates
+
+print(ddf.info())
 
 
 
