@@ -87,6 +87,34 @@ ddf.loc[ddf['Payment Method'].isna(), 'Payment Method'] = pm_mode
 
 print(ddf['Payment Method'].unique())
 
+
+# -- Replace Invalid Locations with weighted Takeaway or In-Store
+rng = np.random.default_rng(248)
+ddf['Location'] = ddf['Location'].where(ddf['Location'].isin(['Takeaway', 'In-store']))
+loc_mask = ddf['Location'].isna()
+
+ta_chance =   ddf['Location'].value_counts().get('Takeaway', 0) / (len(ddf)-loc_mask.sum())
+is_chance = ddf['Location'].value_counts().get('In-store', 0) /(len(ddf)-loc_mask.sum())
+
+print(ta_chance)
+print(is_chance)
+
+if loc_mask.sum() > 0:
+    ddf.loc[loc_mask, 'Location'] = rng.choice(['Takeaway', 'In-store'], size=loc_mask.sum(), p=[ta_chance, (1 - ta_chance)])
+
+ta_chance =   ddf['Location'].value_counts().get('Takeaway', 0) / (len(ddf))
+is_chance = ddf['Location'].value_counts().get('In-store', 0) /(len(ddf))
+
+print(ta_chance)
+print(is_chance)
+print(ddf['Location'].value_counts())
+
+print(ddf.info())
+
+
+
+
+
 # print(merged_df.head())
 
 # ddf['Price Per Unit'] = ddf['Price Per Unit'].where(ddf['Price Per Unit'].isin(rt['price']))
