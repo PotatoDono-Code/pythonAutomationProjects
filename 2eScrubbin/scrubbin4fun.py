@@ -8,3 +8,7 @@ if not os.path.exists(rd):
 else:
     repo = Repo(rd)
 
+git_cmd = repo.git
+git_cmd.sparse_checkout('init', '--cone')
+git_cmd.sparse_checkout('set', 'packs')
+git_cmd.checkout('release')
