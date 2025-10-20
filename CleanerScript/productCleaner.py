@@ -2,6 +2,9 @@ import pandas as pd
 import numpy as np
 import kagglehub
 from kagglehub import KaggleDatasetAdapter
+from rapidfuzz import fuzz
+from rapidfuzz import process
+from rapidfuzz.process import extractOne
 
 # Import Dirty Dataset from Kaggle
 ddf = kagglehub.dataset_load(KaggleDatasetAdapter.PANDAS, "ahmedmohamed2003/cafe-sales-dirty-data-for-cleaning-training", "dirty_cafe_sales.csv")
@@ -16,16 +19,40 @@ rt = pd.DataFrame({
 def get_mode(data):
     data.mode().iloc[0] if not data.mode().empty() else None
 
+# -- Fuzzy match function
+def fuzzy_match(compare_value, key_series, match_ratio=85):
+    
+    if pd.isna(compare_value):
+        return np.nan
+    elif compare_value in key_series:
+        return compare_value
+    
+    match = process.extractOne(compare_value, key_series, scorer=fuzz.token_sort_ratio)
+    if match and match[1] >= match_ratio:
+        return match[0]
+    else:
+        return np.nan
+
+
+# -- Define function to clean items by referencing a key
+def replace_by_key(idf, target_column, key_series):
+    
+    valid_mask = idf[target_column].isin(key_series)
+    replacements = idf.loc[~valid_mask, target_column].apply(lambda x: fuzzy_match(x, key_series))
+    idf.loc[~valid_mask, target_column]= replacements
+
+    print(f"Fuzzy-matched and replaced {replacements.notna().sum()} values in '{target_column}'.")
+  
 # -- Numerical Values to Floats
 cols = ['Price Per Unit', 'Quantity', 'Total Spent']
 ddf[cols] = ddf[cols].apply(pd.to_numeric, errors='coerce')
 
 
 # -- Replace all Non-Standard items with NaN
-ddf['Item'] = ddf['Item'].where(ddf["Item"].isin(rt["item"]))
 replaced_item_mask = ddf['Price Per Unit'].isin(rt['price'])
 ddf['Price Per Unit'] = ddf['Price Per Unit'].where(replaced_item_mask)
 
+replace_by_key(ddf, 'Item', rt['item'])
 
 # -- Update Price Via Reference Table
 merged_df = ddf.merge(rt, how='left', left_on='Item', right_on='item')
