@@ -18,6 +18,8 @@ git_cmd.sparse_checkout('init', '--cone')
 git_cmd.sparse_checkout('set', 'packs')
 git_cmd.checkout('release')
 
+df_collection = {}
+
 # -- Testing out files
 # test_json = "2e Datasets/packs/abomination-vaults-bestiary/abomination-vaults-hardcover-compilation/beluthus.json"
 
@@ -35,19 +37,21 @@ def nested_value_search(file, keys):
             file = file.get(i)
     return file if file else None
 
-def multi_value_return(file, keys):
+def multi_value_return(json_data, key_group):
     values_collection = []
+    filtered_data = ""
     
-    for i in keys:
-        for j in keys[i]:
-            if isinstance(file, dict):
-                file = file.get(j)
-        values_collection.append(file) if file else None
+    for keys in key_group:
+        filtered_data = json_data
+        for key in keys:
+            if isinstance(filtered_data, dict):
+                filtered_data = filtered_data.get(key)
+        values_collection.append(filtered_data) if filtered_data else ""
     
     return values_collection
 
-# -- Recurse through directory checking each .json file
-def pull_all_cat_values(file_directory, search_key):
+# -- Recurse through directory, pulling all valid entries for entered search keys
+def pull_all_cat_values(file_directory, search_key, df_name):
 
     cat_values = []
 
@@ -59,22 +63,25 @@ def pull_all_cat_values(file_directory, search_key):
             with open(path, "r", encoding = "UTF-8") as file:
                 data = json.load(file)
                 captured_value = multi_value_return(data, search_key)
-                if isinstance(captured_value, str):
-                    cat_values.append(captured_value)
+                cat_values.append(captured_value)
 
         except(json.JSONDecodeError, KeyError) as error:
 
             print(f"Skipped {path} due to error: {error}")
     
-    rdf = pd.DataFrame(cat_values)
-    key_conversion = []
-    for i in search_key:
-        if isinstance(search_key, str):
-            search_key = [search_key]
-        key_conversion.append(search_key)
-    target_names = [last[-1] for last in key_conversion]
-    rdf.columns = target_names
+    df_collection[df_name] = pd.DataFrame(cat_values)
 
-    return rdf
+    target_names = []
+    
+    for key in search_key:
+        if isinstance(key, str):
+            target_names.append(key)
+        elif isinstance(key, list):
+            target_names.append(key[-1])
 
-all_types = pull_all_cat_values("2e Datasets/packs", ["_id", "type", ["system", "details", "publication", "title"]])
+    df_collection[df_name].columns = target_names
+
+    return df_collection[df_name]
+
+all_types = pull_all_cat_values("2e Datasets/packs", ["_id", "type", ["system", "details", "publication", "title"]], "Test DF")
+print(all_types)
