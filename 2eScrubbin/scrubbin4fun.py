@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import json
 import glob
+from collections import Counter
 
 # -- Target the directory for the 2e Data Repo
 rd = "2e Datasets"
@@ -26,32 +27,55 @@ df_collection = {}
 # 4. Search through multiple files and store all entries in data frame
 # 5. Search through multiple files and store selected entries into a data fram
 
-def flatten_json(file_directory):
+# def flatten_json(file_directory):
 
-    file_paths = os.path.join(file_directory, "**/*.json")
-    json_files = glob.glob(file_paths, recursive=True)
+#     file_paths = os.path.join(file_directory, "**/*.json")
+#     json_files = glob.glob(file_paths, recursive=True)
 
-    for file in json_files:
+#     for file in json_files:
         
+#         try:
+#             with open(file, "r", encoding = "UTF-8") as d:
+#                 file_data = json.load(d)
+#                 df_collection[file]=pd.json_normalize(file_data)
+
+#         except(json.JSONDecodeError, KeyError) as error:
+#             print(f"Skipped {file} due to error: {error}")
+
+# flatten_json("2e Datasets/packs")
+
+# all_types = []
+# for each in df_collection:
+#     try:
+#         all_types.extend(df_collection[each]['type'].dropna().tolist())
+#     except:
+#         print(f"Error for {each}")
+# print(set(all_types))
+
+# ~~~~~~~~~~ Schema Frequency Mapping?
+
+def frequency_map(file_directory):
+    all_keys = Counter()
+
+    json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive=True)
+    file_count = len(json_files)
+
+    for i, json_file in enumerate(json_files, 1):
         try:
-            with open(file, "r", encoding = "UTF-8") as d:
-                file_data = json.load(d)
-                df_collection[file]=pd.json_normalize(file_data)
+            with open(json_file, "r", encoding="UTF-8") as file:
+                data = json.load(file)
+                df = pd.json_normalize(data)
+                all_keys.update(df.columns)
 
-        except(json.JSONDecodeError, KeyError) as error:
-            print(f"Skipped {file} due to error: {error}")
+        except Exception as e:
+            print(f"Skipped {json_file} for {e}")
 
-flatten_json("2e Datasets/packs")
+        if i % 500 == 0:
+            print(f"{i} of {file_count} Processed")
 
-all_types = []
-for each in df_collection:
-    try:
-        all_types.extend(df_collection[each]['type'].dropna().tolist())
-    except:
-        print(f"Error for {each}")
-print(set(all_types))
+    return all_keys
 
-
+print(frequency_map("2e Datasets/packs"))
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
