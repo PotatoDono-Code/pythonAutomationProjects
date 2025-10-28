@@ -54,7 +54,7 @@ df_collection = {}
 
 # ~~~~~~~~~~ Schema Frequency Mapping?
 
-def frequency_map(file_directory):
+def gen_frequency_map(file_directory):
     all_keys = Counter()
 
     json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive=True)
@@ -75,7 +75,16 @@ def frequency_map(file_directory):
 
     return all_keys
 
-print(frequency_map("2e Datasets/packs"))
+def map_to_df(file_directory, top_n = 50):
+    all_keys = gen_frequency_map(file_directory)
+    df = pd.DataFrame(all_keys.items(), columns = ['Reference', 'Count'])
+    df = df.sort_values(['Count'], ascending = False).reset_index(drop = True)
+    return df.head(top_n)
+
+print(map_to_df("2e Datasets/packs"))
+
+
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
