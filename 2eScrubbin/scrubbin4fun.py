@@ -122,9 +122,11 @@ def data_to_pickle(file_directory):
     else:
         print(f"No new files to update")
 
-data_to_pickle("2e Datasets/packs")
+# data_to_pickle("2e Datasets/packs")
 
+loaded_df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
 
+print(loaded_df.head())
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
