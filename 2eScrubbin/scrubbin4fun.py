@@ -4,6 +4,7 @@ import pandas as pd
 import json
 import glob
 from collections import Counter
+from pathlib import Path
 
 # -- Target the directory for the 2e Data Repo
 rd = "2e Datasets"
@@ -54,34 +55,74 @@ df_collection = {}
 
 # ~~~~~~~~~~ Schema Frequency Mapping?
 
-def gen_frequency_map(file_directory):
-    all_keys = Counter()
+# def gen_frequency_map(file_directory):
+#     all_keys = Counter()
 
-    json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive=True)
+#     json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive=True)
+#     file_count = len(json_files)
+
+#     for i, json_file in enumerate(json_files, 1):
+#         try:
+#             with open(json_file, "r", encoding="UTF-8") as file:
+#                 data = json.load(file)
+#                 df = pd.json_normalize(data)
+#                 all_keys.update(df.columns)
+
+#         except Exception as e:
+#             print(f"Skipped {json_file} for {e}")
+
+#         if i % 500 == 0:
+#             print(f"{i} of {file_count} Processed")
+
+#     return all_keys
+
+# def map_to_df(file_directory, top_n = 50):
+#     all_keys = gen_frequency_map(file_directory)
+#     df = pd.DataFrame(all_keys.items(), columns = ['Reference', 'Count'])
+#     df = df.sort_values(['Count'], ascending = False).reset_index(drop = True)
+#     return df.head(top_n)
+
+# print(map_to_df("2e Datasets/packs"))
+
+# -- Export full dataframe to file
+
+def data_to_pickle(file_directory):
+    master_pickle_path = Path("2eScrubbin/2e_master_pickle.pkl")
+    
+    if master_pickle_path.exists():
+        df = pd.read_pickle(master_pickle_path)
+    else:
+        df = pd.DataFrame()
+
+    known_files = set(df.get('_id', []))
+    updated = 0
+
+    json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive = True)
     file_count = len(json_files)
 
-    for i, json_file in enumerate(json_files, 1):
+    for i, file_path in enumerate(json_files, 1):
         try:
-            with open(json_file, "r", encoding="UTF-8") as file:
-                data = json.load(file)
-                df = pd.json_normalize(data)
-                all_keys.update(df.columns)
+            with open(file_path, "r", encoding = "UTF-8") as file:
+                id_check = json.load(file)
+                if id_check['_id'] not in known_files:
+                    df = pd.concat([df, pd.json_normalize(id_check)], ignore_index = True, sort = False)
+                    known_files.add(id_check['_id'])
+                    updated += 1
+                
+                if i % 500 == 0:
+                    print(f"{i} of {file_count} Processed")
 
         except Exception as e:
-            print(f"Skipped {json_file} for {e}")
+            print(f"{file_path} failed with {e}")
 
-        if i % 500 == 0:
-            print(f"{i} of {file_count} Processed")
+    if updated > 0:
+        df.to_pickle(master_pickle_path)
+        print(f"Updated {updated} file entries.")
 
-    return all_keys
+    else:
+        print(f"No new files to update")
 
-def map_to_df(file_directory, top_n = 50):
-    all_keys = gen_frequency_map(file_directory)
-    df = pd.DataFrame(all_keys.items(), columns = ['Reference', 'Count'])
-    df = df.sort_values(['Count'], ascending = False).reset_index(drop = True)
-    return df.head(top_n)
-
-print(map_to_df("2e Datasets/packs"))
+data_to_pickle("2e Datasets/packs")
 
 
 
