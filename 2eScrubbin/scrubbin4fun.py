@@ -55,38 +55,36 @@ df_collection = {}
 
 # ~~~~~~~~~~ Schema Frequency Mapping?
 
-# def gen_frequency_map(file_directory):
-#     all_keys = Counter()
+def gen_frequency_map(file_directory):
+    all_keys = Counter()
 
-#     json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive=True)
-#     file_count = len(json_files)
+    json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive=True)
+    file_count = len(json_files)
 
-#     for i, json_file in enumerate(json_files, 1):
-#         try:
-#             with open(json_file, "r", encoding="UTF-8") as file:
-#                 data = json.load(file)
-#                 df = pd.json_normalize(data)
-#                 all_keys.update(df.columns)
+    for i, json_file in enumerate(json_files, 1):
+        try:
+            with open(json_file, "r", encoding="UTF-8") as file:
+                data = json.load(file)
+                df = pd.json_normalize(data)
+                all_keys.update(df.columns)
 
-#         except Exception as e:
-#             print(f"Skipped {json_file} for {e}")
+        except Exception as e:
+            print(f"Skipped {json_file} for {e}")
 
-#         if i % 500 == 0:
-#             print(f"{i} of {file_count} Processed")
+        if i % 500 == 0:
+            print(f"{i} of {file_count} Processed")
 
-#     return all_keys
+    return all_keys
 
-# def map_to_df(file_directory, top_n = 50):
-#     all_keys = gen_frequency_map(file_directory)
-#     df = pd.DataFrame(all_keys.items(), columns = ['Reference', 'Count'])
-#     df = df.sort_values(['Count'], ascending = False).reset_index(drop = True)
-#     return df.head(top_n)
-
-# print(map_to_df("2e Datasets/packs"))
+def map_to_df(file_directory, top_n = 50):
+    all_keys = gen_frequency_map(file_directory)
+    df = pd.DataFrame(all_keys.items(), columns = ['Reference', 'Count'])
+    df = df.sort_values(['Count'], ascending = False).reset_index(drop = True)
+    return df.head(top_n)
 
 # -- Export full dataframe to file
 
-def data_to_pickle(file_directory):
+def json_to_pickle(file_directory):
     master_pickle_path = Path("2eScrubbin/2e_master_pickle.pkl")
     
     if master_pickle_path.exists():
@@ -122,11 +120,28 @@ def data_to_pickle(file_directory):
     else:
         print(f"No new files to update")
 
-# data_to_pickle("2e Datasets/packs")
+def sort_common_keys(input_dataframe, top_n = 50):
+    total_count = input_dataframe.notna().sum().sort_values(ascending = False)
+    return total_count.head(top_n)
 
-loaded_df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
+df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
 
-print(loaded_df.head())
+def extract_json_data_by_key(input_df, target_key, target_value):
+    filtered_data = input_df[input_df[target_key] == target_value]
+    filtered_data = filtered_data.dropna(axis = 1, how = 'all')
+    return filtered_data
+
+def dfs_by_key_values(input_df, target_key):
+    df_collection = {}
+    unique_values = input_df[target_key].unique()
+    for value in unique_values:
+        df_collection[value] = extract_json_data_by_key(input_df, target_key, value)
+        print(f"Completed DF for {value}")
+    return df_collection
+
+type_dfs = dfs_by_key_values(df, 'type')
+    
+
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
