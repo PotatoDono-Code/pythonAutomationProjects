@@ -28,26 +28,26 @@ def return_all_by_type(value:str):
 # system.level.value - spell level
 @app.get("/spell_filter")
 def complete_spell_filter(list: str = None, level: int = None, trait: str = None, spell_rarity: str = None, save: str = None):
-    query_df = df.copy()
+    mask = pd.Series(True, index = df.index)
     
     if list:
-        query_df = query_df[query_df['system.traits.traditions'] == list]
-    if level:
+        mask &= df['system.traits.traditions'] == list
+    if level is not None:
         if level > 1:
-            query_df = query_df[query_df['system.level.value'] == level]
+            mask &= df['system.level.value'] == level
         elif level == 1:
-            query_df = query_df[query_df['systen.level.value'] == level & "cantrip" not in query_df['system.traits.value']]
+            mask &= (df['system.level.value'] == level) & (~df['system.traits.value'].apply(lambda traits: "cantrip" in traits))
         elif level == 0:
-            query_df = query_df["cantrip" in query_df['system.traits.value']]
+            mask &= df['system.traits.value'].apply(lambda traits: "cantrip" in traits)
         else:
             return {"error": "Invalid Spell Level Entry"}
     if trait:
-        query_df = query_df[trait in query_df['system.traits.value']]
+        mask &= df['system.traits.value'].apply(lambda traits: trait in traits)
     if spell_rarity:
-        query_df = query_df[query_df['system.traits.rarity'] == spell_rarity]
+        mask &= df['system.traits.rarity'] == spell_rarity
     if save:
-        query_df = query_df[query_df['system.defense.save.statistic'] == save]
+        mask &= df['system.defense.save.statistic'] == save
 
-    query_df = query_df.dropna(axis = 1, how = "all").to_json(orient = "records")
+    query_df = df[mask].dropna(axis = 1, how = "all").to_json(orient = "records")
 
     return json.loads(query_df)
