@@ -23,21 +23,75 @@ from pathlib import Path
 # git_cmd.sparse_checkout('set', 'packs')
 # git_cmd.checkout('release')
 
+# # -- Convert entire .json file repo in a singular pandas dataframe
+# # ################### - THIS NEEDS TO BE REWORKED/OPTIMIZED. VERY SLOW ####################
+# def json_to_pickle(file_directory):
+    
+#     # Reference the master file. If it doesn't not exist, create a new one at that location
+#     master_pickle_path = Path("2eScrubbin/2e_master_pickle.pkl")
+    
+#     if master_pickle_path.exists():
+#         df = pd.read_pickle(master_pickle_path)
+#     else:
+#         df = pd.DataFrame()
+
+#     # Get a collection of all '_id's to use later for skipping the flattening process if it is already done.
+#     # Create Variable to keep track of how many entries are updated.
+#     known_files = set(df.get('_id', []))
+#     updated = 0
+
+#     # Pull all of the file paths to use for the traversing and converting to dataframe information
+#     json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive = True)
+#     file_count = len(json_files)
+
+#     # Storage for updating df at the end
+#     new_records = []
+
+#     # Check through every file in the directory. If the _id matches an _id in the known_files, skip it. Otherwise, load the 
+#     # file, convert it into a dataframe, and add to the master df. Iterate i each time and report every 500 files on progress
+#     for i, file_path in enumerate(json_files, 1):
+#         try:
+#             with open(file_path, "r") as file:
+#                 id_check = orjson.load(file.read())
+#                 if id_check['_id'] not in known_files:
+#                     new_records.append(pd.json_normalize(id_check))
+#                     known_files.add(id_check['_id'])
+#                     updated += 1
+                
+#                 if i % 500 == 0:
+#                     print(f"{i} of {file_count} Processed")
+
+#         except Exception as e:
+#             print(f"{file_path} failed with {e}")
+
+#     # If any values have been updated, rewrite the file and report the number of updates. If not, report nothing changed
+#     if new_records:
+#         df = pd.concat([df, *new_records], ignore_index = True, sort = False)
+#         df.to_pickle(master_pickle_path)
+#         print(f"Updated {updated} file entries.")
+    
+#     else:
+#         print(f"No new files to update")
+
 # -- Convert entire .json file repo in a singular pandas dataframe
 # ################### - THIS NEEDS TO BE REWORKED/OPTIMIZED. VERY SLOW ####################
-def json_to_pickle(file_directory):
+def json_to_parquet_dir(file_directory):
     
-    # Reference the master file. If it doesn't not exist, create a new one at that location
-    master_pickle_path = Path("2eScrubbin/2e_master_pickle.pkl")
+    # Reference the master directory. If it doesn't not exist, create a new one at that location
+    master_parq_dir = Path("2eScrubbin/2e_master_parquet")
+    master_parq_dir.mkdir(parents = True, exist_ok = True)
     
-    if master_pickle_path.exists():
-        df = pd.read_pickle(master_pickle_path)
+    if master_parq_dir.exists() and any(master_parq_dir.rglob("*.parquet")):
+        df = pd.read_parquet(master_parq_dir)
+
+        # Get a collection of all '_id's to use later for skipping the flattening process if it is already done.
+        known_files = set(df['_id'])
+
     else:
         df = pd.DataFrame()
+        known_files = set()
 
-    # Get a collection of all '_id's to use later for skipping the flattening process if it is already done.
     # Create Variable to keep track of how many entries are updated.
-    known_files = set(df.get('_id', []))
     updated = 0
 
     # Pull all of the file paths to use for the traversing and converting to dataframe information
@@ -51,8 +105,8 @@ def json_to_pickle(file_directory):
     # file, convert it into a dataframe, and add to the master df. Iterate i each time and report every 500 files on progress
     for i, file_path in enumerate(json_files, 1):
         try:
-            with open(file_path, "r") as file:
-                id_check = orjson.load(file.read())
+            with open(file_path, "rb") as file:
+                id_check = orjson.loads(file.read())
                 if id_check['_id'] not in known_files:
                     new_records.append(pd.json_normalize(id_check))
                     known_files.add(id_check['_id'])
@@ -67,7 +121,7 @@ def json_to_pickle(file_directory):
     # If any values have been updated, rewrite the file and report the number of updates. If not, report nothing changed
     if new_records:
         df = pd.concat([df, *new_records], ignore_index = True, sort = False)
-        df.to_pickle(master_pickle_path)
+        df.to_parquet(master_parq_dir, partition_cols = ['type'], index = False, engine = "pyarrow")
         print(f"Updated {updated} file entries.")
     
     else:
