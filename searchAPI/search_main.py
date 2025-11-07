@@ -27,22 +27,22 @@ def return_all_by_type(value:str):
 # system.trait.value - spell traits (used to identify cantrip as well)
 # system.level.value - spell level
 @app.get("/spell_filter")
-def complete_spell_filter(list: str = None, level: int = None, trait: str = None, spell_rarity: str = None, save: str = None):
+def complete_spell_filter(tradition: str = None, level: int = None, trait: str = None, spell_rarity: str = None, save: str = None):
     mask = pd.Series(True, index = df.index)
     
-    if list:
-        mask &= df['system.traits.traditions'] == list
+    if tradition:
+        mask &= df['system.traits.traditions'] == tradition
     if level is not None:
         if level > 1:
             mask &= df['system.level.value'] == level
         elif level == 1:
-            mask &= (df['system.level.value'] == level) & (~df['system.traits.value'].apply(lambda traits: "cantrip" in traits))
+            mask &= (df['system.level.value'] == level) & (~df['system.traits.value'].apply(lambda traits: isinstance(traits, (list, str)) and "cantrip" in traits))
         elif level == 0:
-            mask &= df['system.traits.value'].apply(lambda traits: "cantrip" in traits)
+            mask &= df['system.traits.value'].apply(lambda traits: isinstance(traits, (list, str)) and "cantrip" in traits)
         else:
             return {"error": "Invalid Spell Level Entry"}
     if trait:
-        mask &= df['system.traits.value'].apply(lambda traits: trait in traits)
+        mask &= df['system.traits.value'].apply(lambda traits: isinstance(traits, (list, str)) and trait in traits)
     if spell_rarity:
         mask &= df['system.traits.rarity'] == spell_rarity
     if save:
