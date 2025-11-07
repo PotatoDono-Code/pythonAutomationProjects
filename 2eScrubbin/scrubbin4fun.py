@@ -96,5 +96,7 @@ df_collection = {}
 df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
 
 # -- Pull seperate dfs for each type
-type_dfs = dfs_by_key_values(df, 'type')
-    
+df_collection = dfs_by_key_values(df, 'type')
+df_npc_cr = dfs_by_key_values(df_collection['npc'], 'system.details.level.value')
+
+print (df_collection['kit'])
