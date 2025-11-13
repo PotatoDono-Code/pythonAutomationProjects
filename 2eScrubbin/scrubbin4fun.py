@@ -6,6 +6,8 @@ import orjson
 import glob
 from collections import Counter
 from pathlib import Path
+import gc
+import re
 
 # # ~~~~~~ Doesn't need to run every time. Un-comment and run periodically ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -23,55 +25,7 @@ from pathlib import Path
 # git_cmd.sparse_checkout('set', 'packs')
 # git_cmd.checkout('release')
 
-# # -- Convert entire .json file repo in a singular pandas dataframe
-# # ################### - THIS NEEDS TO BE REWORKED/OPTIMIZED. VERY SLOW ####################
-# def json_to_pickle(file_directory):
-    
-#     # Reference the master file. If it doesn't not exist, create a new one at that location
-#     master_pickle_path = Path("2eScrubbin/2e_master_pickle.pkl")
-    
-#     if master_pickle_path.exists():
-#         df = pd.read_pickle(master_pickle_path)
-#     else:
-#         df = pd.DataFrame()
 
-#     # Get a collection of all '_id's to use later for skipping the flattening process if it is already done.
-#     # Create Variable to keep track of how many entries are updated.
-#     known_files = set(df.get('_id', []))
-#     updated = 0
-
-#     # Pull all of the file paths to use for the traversing and converting to dataframe information
-#     json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive = True)
-#     file_count = len(json_files)
-
-#     # Storage for updating df at the end
-#     new_records = []
-
-#     # Check through every file in the directory. If the _id matches an _id in the known_files, skip it. Otherwise, load the 
-#     # file, convert it into a dataframe, and add to the master df. Iterate i each time and report every 500 files on progress
-#     for i, file_path in enumerate(json_files, 1):
-#         try:
-#             with open(file_path, "r") as file:
-#                 id_check = orjson.load(file.read())
-#                 if id_check['_id'] not in known_files:
-#                     new_records.append(pd.json_normalize(id_check))
-#                     known_files.add(id_check['_id'])
-#                     updated += 1
-                
-#                 if i % 500 == 0:
-#                     print(f"{i} of {file_count} Processed")
-
-#         except Exception as e:
-#             print(f"{file_path} failed with {e}")
-
-#     # If any values have been updated, rewrite the file and report the number of updates. If not, report nothing changed
-#     if new_records:
-#         df = pd.concat([df, *new_records], ignore_index = True, sort = False)
-#         df.to_pickle(master_pickle_path)
-#         print(f"Updated {updated} file entries.")
-    
-#     else:
-#         print(f"No new files to update")
 
 # -- Convert entire .json file repo in a singular pandas dataframe
 # ################### - THIS NEEDS TO BE REWORKED/OPTIMIZED. VERY SLOW ####################
@@ -82,9 +36,9 @@ def json_to_parquet_dir(file_directory):
     master_parq_dir.mkdir(parents = True, exist_ok = True)
     
     if master_parq_dir.exists() and any(master_parq_dir.rglob("*.parquet")):
-        df = pd.read_parquet(master_parq_dir)
+        df = pd.concat([pd.read_parquet(p) for p in master_parq_dir.rglob("*.parquet")], ignore_index=True)
 
-        # Get a collection of all '_id's to use later for skipping the flattening process if it is already done.
+        # Get a collection of all '_id's to use later for skipping the flattening process if it is already d    one.
         known_files = set(df['_id'])
 
     else:
@@ -108,7 +62,7 @@ def json_to_parquet_dir(file_directory):
             with open(file_path, "rb") as file:
                 id_check = orjson.loads(file.read())
                 if id_check['_id'] not in known_files:
-                    new_records.append(pd.json_normalize(id_check))
+                    new_records.append(compress_fields(pd.json_normalize(id_check).iloc[0]))
                     known_files.add(id_check['_id'])
                     updated += 1
                 
@@ -120,8 +74,14 @@ def json_to_parquet_dir(file_directory):
 
     # If any values have been updated, rewrite the file and report the number of updates. If not, report nothing changed
     if new_records:
-        df = pd.concat([df, *new_records], ignore_index = True, sort = False)
-        df.to_parquet(master_parq_dir, partition_cols = ['type'], index = False, engine = "pyarrow")
+        new_df = pd.DataFrame(new_records)
+        # Write parquet to memory in groups, not all at once.
+        timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        for t, subset in new_df.groupby("type"):
+            sub_dir = master_parq_dir/f"{t}"
+            sub_dir.mkdir(parents = True, exist_ok = True)
+            subset.to_parquet(sub_dir/f"part_{timestamp}.parquet", index = False)
+
         print(f"Updated {updated} file entries.")
     
     else:
@@ -159,6 +119,38 @@ def sort_common_fields(idf):
 
     return sort_table
 
+# -- Clearing out unwanted columns
+def drop_unwanted_columns(idf, drop_pattern):
+
+    dropped_columns = [c for c in idf.columns if re.search(drop_pattern, c)]
+    return idf.drop(columns = dropped_columns, errors = "ignore")
+
+def compress_fields(input_series):
+    compressed_fields = {}
+    keep_fields = {}
+
+    for c in input_series.index:
+        num_pattern_match = re.search(r"^(.+?)\.(\d+)\.(.+)$", c)
+        drop_pattern = re.search(r"(\.rule)|(\.selected\.)|(\.[A-Za-z0-9]{15,})", c)
+
+        if num_pattern_match:
+            new_field = f"{num_pattern_match.group(1)}.{num_pattern_match.group(3)}" 
+            pulled_value = input_series[c]
+            if pd.notna(pulled_value):      
+               compressed_fields.setdefault(new_field, []).append(input_series[c])
+
+        elif not drop_pattern:
+            keep_fields[c] = input_series[c]
+
+    regulate_compressed = {k: v if len(v) > 1 else v[0] for k, v in compressed_fields.items()}
+    combined_fields = keep_fields | regulate_compressed
+    
+    return pd.Series(combined_fields)
+
+
+
+
+
 # -- Create a dataframe to hold future dataframes
 df_collection = {}
 
@@ -168,14 +160,13 @@ df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
 # -- Pull seperate dfs for each type
 df_collection = dfs_by_key_values(df, 'type')
 
-spell_columns = ['system.target.value', 'system.requirements', 'system.description.value', 'system.level.value', '_id', 'name', 
-                 'system.traits.rarity', 'system.counteraction', 'system.traits.value', 'system.duration.sustained', 
-                 'system.duration.value', 'system.range.value', 'type', 'system.cost.value', 'system.traits.traditions', 
-                 'system.time.value', 'system.defense.save.statistic', 'system.defense.save.basic', 'system.area.type', 
-                 'system.area.value', 'system.area.details']
-
 # sort_common_fields(df_collection['spell']).to_csv("spell_common_fields.csv", index = False)
 # print(df[df['_id'] == "YLzufF5UKRGjT83M"].dropna(axis = 1, how = "all"))
-spell_collection = df_collection['spell'][spell_columns]
+spell_collection = df_collection['spell']
 
-spell_collection.to_csv("spell_export.csv", index = False)
+drop_pattern = r"(\.rule)|(\.selected\.)|(\.[A-Za-z0-9]{15,})"
+compression_pattern = 
+compressed_spells = drop_unwanted_columns(spell_collection, drop_pattern)
+
+
+compressed_spells.to_csv("compressed_spell_export.csv", index = False)
