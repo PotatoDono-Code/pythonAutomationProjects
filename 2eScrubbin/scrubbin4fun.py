@@ -8,6 +8,7 @@ from collections import Counter
 from pathlib import Path
 import gc
 import re
+import numpy as np
 
 # # ~~~~~~ Doesn't need to run every time. Un-comment and run periodically ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -34,15 +35,17 @@ def json_to_parquet_dir(file_directory):
     # Reference the master directory. If it doesn't not exist, create a new one at that location
     master_parq_dir = Path("2eScrubbin/2e_master_parquet")
     master_parq_dir.mkdir(parents = True, exist_ok = True)
+    metadata_dir = master_parq_dir/"metadata"
+    metadata_dir.mkdir(parents = True, exist_ok = True)
+    id_check_path = metadata_dir/"id_checklist.pkl"
     
-    if master_parq_dir.exists() and any(master_parq_dir.rglob("*.parquet")):
-        df = pd.concat([pd.read_parquet(p) for p in master_parq_dir.rglob("*.parquet")], ignore_index=True)
-
+    if id_check_path.exists():
+        id_df = pd.read_pickle(id_check_path)
         # Get a collection of all '_id's to use later for skipping the flattening process if it is already d    one.
-        known_files = set(df['_id'])
+        known_files = set(id_df['_id'])
 
     else:
-        df = pd.DataFrame()
+        id_df = pd.DataFrame(columns = ["_id", "type"])
         known_files = set()
 
     # Create Variable to keep track of how many entries are updated.
@@ -54,6 +57,7 @@ def json_to_parquet_dir(file_directory):
 
     # Storage for updating df at the end
     new_records = []
+    new_id_records = []
 
     # Check through every file in the directory. If the _id matches an _id in the known_files, skip it. Otherwise, load the 
     # file, convert it into a dataframe, and add to the master df. Iterate i each time and report every 500 files on progress
@@ -62,7 +66,9 @@ def json_to_parquet_dir(file_directory):
             with open(file_path, "rb") as file:
                 id_check = orjson.loads(file.read())
                 if id_check['_id'] not in known_files:
-                    new_records.append(compress_fields(pd.json_normalize(id_check).iloc[0]))
+                    record = compress_fields(pd.json_normalize(id_check).iloc[0])
+                    new_records.append(record)
+                    new_id_records.append({"_id": id_check.get('_id'), "type": record['type']})
                     known_files.add(id_check['_id'])
                     updated += 1
                 
@@ -81,6 +87,9 @@ def json_to_parquet_dir(file_directory):
             sub_dir = master_parq_dir/f"{t}"
             sub_dir.mkdir(parents = True, exist_ok = True)
             subset.to_parquet(sub_dir/f"part_{timestamp}.parquet", index = False)
+
+        id_df = pd.concat([id_df, pd.DataFrame(new_id_records)])
+        id_df.to_pickle(id_check_path)
 
         print(f"Updated {updated} file entries.")
     
@@ -102,9 +111,12 @@ def extract_json_data_by_key(input_df, target_key, target_value):
 # -- for each unique value
 def dfs_by_key_values(input_df, target_key):
     df_collection = {}
+    pickles_dir = Path("2eScrubbin/TempPickls")
+    pickles_dir.mkdir(parents = True, exist_ok = True)
     unique_values = input_df[target_key].unique()
     for value in unique_values:
         df_collection[value] = extract_json_data_by_key(input_df, target_key, value)
+        df_collection[value].to_pickle(pickles_dir/f"{value}.pkl")
         print(f"Completed DF for {value}")
     return df_collection
 
@@ -120,27 +132,38 @@ def sort_common_fields(idf):
     return sort_table
 
 # -- Clearing out unwanted columns
-def drop_unwanted_columns(idf, drop_pattern):
-
-    dropped_columns = [c for c in idf.columns if re.search(drop_pattern, c)]
-    return idf.drop(columns = dropped_columns, errors = "ignore")
-
 def compress_fields(input_series):
     compressed_fields = {}
     keep_fields = {}
+    num_pattern= re.compile(r"^(.+?)\.(\d+)\.(.+)$")
+    drop_pattern = re.compile(r"(\.rule)|(\.selected)|(\.overlays)|(\.heightening)|(\.[A-Za-z0-9]{12,})")
 
     for c in input_series.index:
-        num_pattern_match = re.search(r"^(.+?)\.(\d+)\.(.+)$", c)
-        drop_pattern = re.search(r"(\.rule)|(\.selected\.)|(\.[A-Za-z0-9]{15,})", c)
+        num_pattern_match = num_pattern.search(c)
+        drop_pattern_match = drop_pattern.search(c)
+        
+        if not drop_pattern_match:
+        
+            if num_pattern_match:
+                new_field = f"{num_pattern_match.group(1)}.{num_pattern_match.group(3)}" 
+                pulled_value = input_series[c]
 
-        if num_pattern_match:
-            new_field = f"{num_pattern_match.group(1)}.{num_pattern_match.group(3)}" 
-            pulled_value = input_series[c]
-            if pd.notna(pulled_value):      
-               compressed_fields.setdefault(new_field, []).append(input_series[c])
+                # if (
+                #     pulled_value is None 
+                #     or pulled_value != pulled_value
+                #     or (isinstance(pulled_value, list) and any(v is not v for v in pulled_value))
+                #     or (isinstance(pulled_value, list) and len(pulled_value) == 0)
+                #     or (isinstance(pulled_value, np.ndarray))
+                #     or isinstance(pulled_value, (dict, tuple, set))):
 
-        elif not drop_pattern:
-            keep_fields[c] = input_series[c]
+                #     continue
+                # print(pulled_value)
+
+                if not pulled_value != pulled_value :      
+                    compressed_fields.setdefault(new_field, []).append(input_series[c])
+
+            else:
+                keep_fields[c] = input_series[c]
 
     regulate_compressed = {k: v if len(v) > 1 else v[0] for k, v in compressed_fields.items()}
     combined_fields = keep_fields | regulate_compressed
@@ -151,22 +174,22 @@ def compress_fields(input_series):
 
 
 
+
 # -- Create a dataframe to hold future dataframes
-df_collection = {}
+# df_collection = {}
 
 # -- Re-read the main pickle into memory
-df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
+# df = pd.read_pickle("2eScrubbin/2e_master_pickle.pkl")
 
 # -- Pull seperate dfs for each type
-df_collection = dfs_by_key_values(df, 'type')
+# df_collection = dfs_by_key_values(df, 'type')
 
 # sort_common_fields(df_collection['spell']).to_csv("spell_common_fields.csv", index = False)
 # print(df[df['_id'] == "YLzufF5UKRGjT83M"].dropna(axis = 1, how = "all"))
-spell_collection = df_collection['spell']
-
-drop_pattern = r"(\.rule)|(\.selected\.)|(\.[A-Za-z0-9]{15,})"
-compression_pattern = 
-compressed_spells = drop_unwanted_columns(spell_collection, drop_pattern)
+spell_collection = pd.read_pickle("2eScrubbin/TempPickls/spell.pkl")
 
 
+bad_cols = []
+
+compressed_spells = spell_collection.apply(compress_fields, axis = 1)
 compressed_spells.to_csv("compressed_spell_export.csv", index = False)
