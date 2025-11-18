@@ -82,11 +82,12 @@ def json_to_parquet_dir(file_directory):
     if new_records:
         new_df = pd.DataFrame(new_records)
         # Write parquet to memory in groups, not all at once.
-        timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        # timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
         for t, subset in new_df.groupby("type"):
-            sub_dir = master_parq_dir/f"{t}"
-            sub_dir.mkdir(parents = True, exist_ok = True)
-            subset.to_parquet(sub_dir/f"part_{timestamp}.parquet", index = False)
+            #sub_dir = master_parq_dir/f"{t}"
+            #sub_dir.mkdir(parents = True, exist_ok = True)
+            subset.dropna(axis = 1, how = 'all').to_pickle(master_parq_dir/f"{t}.pkl")
+            print(f"Completed type: {t}")
 
         id_df = pd.concat([id_df, pd.DataFrame(new_id_records)])
         id_df.to_pickle(id_check_path)
@@ -186,10 +187,18 @@ def compress_fields(input_series):
 
 # sort_common_fields(df_collection['spell']).to_csv("spell_common_fields.csv", index = False)
 # print(df[df['_id'] == "YLzufF5UKRGjT83M"].dropna(axis = 1, how = "all"))
-spell_collection = pd.read_pickle("2eScrubbin/TempPickls/spell.pkl")
+# spell_collection = pd.read_pickle("2eScrubbin/TempPickls/spell.pkl")
 
 
-bad_cols = []
+# bad_cols = []
 
-compressed_spells = spell_collection.apply(compress_fields, axis = 1)
-compressed_spells.to_csv("compressed_spell_export.csv", index = False)
+# compressed_spells = spell_collection.apply(compress_fields, axis = 1)
+# compressed_spells.to_csv("compressed_spell_export.csv", index = False)
+
+# json_to_parquet_dir("2e Datasets/packs")
+
+print(pd.read_pickle("2eScrubbin/2e_master_parquet/spell.pkl").columns)
+print(pd.read_pickle("2eScrubbin/2e_master_parquet/vehicle.pkl").columns)
+print(pd.read_pickle("2eScrubbin/2e_master_parquet/class.pkl").columns)
+
+
