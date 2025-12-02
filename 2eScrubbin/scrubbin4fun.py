@@ -28,20 +28,22 @@ import numpy as np
 
 
 
-# -- Convert entire .json file repo in a singular pandas dataframe
-# ################### - THIS NEEDS TO BE REWORKED/OPTIMIZED. VERY SLOW ####################
+# -- Function to convert complete .json file directory into a pickle (end goal is to get to a parquet) organized by 'type' 
+# -- and columns filtered down to reduce overall size and complexity by removing uneeded columns and data from the json ingestion
+
 def json_to_parquet_dir(file_directory):
     
-    # Reference the master directory. If it doesn't not exist, create a new one at that location
+    # Reference the master directory. If it doesn't exist, create a new one at that location
     master_parq_dir = Path("2eScrubbin/2e_master_parquet")
     master_parq_dir.mkdir(parents = True, exist_ok = True)
     metadata_dir = master_parq_dir/"metadata"
     metadata_dir.mkdir(parents = True, exist_ok = True)
     id_check_path = metadata_dir/"id_checklist.pkl"
     
+    # Retrieve small metadata set of IDs currently recorded to expedite data ingestion
+    # if it doesn't already exist, create a new file for use
     if id_check_path.exists():
         id_df = pd.read_pickle(id_check_path)
-        # Get a collection of all '_id's to use later for skipping the flattening process if it is already d    one.
         known_files = set(id_df['_id'])
 
     else:
@@ -52,6 +54,7 @@ def json_to_parquet_dir(file_directory):
     updated = 0
 
     # Pull all of the file paths to use for the traversing and converting to dataframe information
+    # Pull the number of files to use as a counting reference
     json_files = glob.glob(os.path.join(file_directory, "**/*.json"), recursive = True)
     file_count = len(json_files)
 
@@ -60,7 +63,9 @@ def json_to_parquet_dir(file_directory):
     new_id_records = []
 
     # Check through every file in the directory. If the _id matches an _id in the known_files, skip it. Otherwise, load the 
-    # file, convert it into a dataframe, and add to the master df. Iterate i each time and report every 500 files on progress
+    # file, convert it into a series, utilize compress_fields to manage the file size and column complexity,
+    # and add to list of series. Iterate i each time and report every 500 files on progress
+    # if it fails, just skip the file and move on
     for i, file_path in enumerate(json_files, 1):
         try:
             with open(file_path, "rb") as file:
@@ -78,11 +83,11 @@ def json_to_parquet_dir(file_directory):
         except Exception as e:
             print(f"{file_path} failed with {e}")
 
-    # If any values have been updated, rewrite the file and report the number of updates. If not, report nothing changed
+    # If any values have been updated, right a new, dated file and store, then report the number of updated files. 
+    # If nothing is updated, report nothing changed
     if new_records:
         new_df = pd.DataFrame(new_records)
-        # Write parquet to memory in groups, not all at once.
-        # timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+        # timestamp = pd.Timestamp.now().strftime("%Y-%m-%d")
         for t, subset in new_df.groupby("type"):
             #sub_dir = master_parq_dir/f"{t}"
             #sub_dir.mkdir(parents = True, exist_ok = True)
@@ -134,42 +139,42 @@ def sort_common_fields(idf):
 
 # -- Clearing out unwanted columns
 def compress_fields(input_series):
-    compressed_fields = {}
+    # compressed_fields = {}
     keep_fields = {}
-    num_pattern= re.compile(r"^(.+?)\.(\d+)\.(.+)$")
-    drop_pattern = re.compile(r"(\.rule)|(\.selected)|(\.overlays)|(\.heightening)|(\.[A-Za-z0-9]{12,})")
+    #num_pattern= re.compile(r"^(.+?)\.(\d+)\.(.+)$")
+    drop_pattern = re.compile(r"(\.rule)|(\.selected)|(\.overlays)|(\.[A-Za-z0-9]{12,})")
 
     for c in input_series.index:
-        num_pattern_match = num_pattern.search(c)
+        #num_pattern_match = num_pattern.search(c)
         drop_pattern_match = drop_pattern.search(c)
         
         if not drop_pattern_match:
         
-            if num_pattern_match:
-                new_field = f"{num_pattern_match.group(1)}.{num_pattern_match.group(3)}" 
-                pulled_value = input_series[c]
+            # if num_pattern_match:
+            #     new_field = f"{num_pattern_match.group(1)}.{num_pattern_match.group(3)}" 
+            #     pulled_value = input_series[c]
 
-                # if (
-                #     pulled_value is None 
-                #     or pulled_value != pulled_value
-                #     or (isinstance(pulled_value, list) and any(v is not v for v in pulled_value))
-                #     or (isinstance(pulled_value, list) and len(pulled_value) == 0)
-                #     or (isinstance(pulled_value, np.ndarray))
-                #     or isinstance(pulled_value, (dict, tuple, set))):
+            #     # if (
+            #     #     pulled_value is None 
+            #     #     or pulled_value != pulled_value
+            #     #     or (isinstance(pulled_value, list) and any(v is not v for v in pulled_value))
+            #     #     or (isinstance(pulled_value, list) and len(pulled_value) == 0)
+            #     #     or (isinstance(pulled_value, np.ndarray))
+            #     #     or isinstance(pulled_value, (dict, tuple, set))):
 
-                #     continue
-                # print(pulled_value)
+            #     #     continue
+            #     # print(pulled_value)
 
-                if not pulled_value != pulled_value :      
-                    compressed_fields.setdefault(new_field, []).append(input_series[c])
+            #     if not pulled_value != pulled_value :      
+            #         compressed_fields.setdefault(new_field, []).append(input_series[c])
 
-            else:
-                keep_fields[c] = input_series[c]
+            # else:
+            keep_fields[c] = input_series[c]
 
-    regulate_compressed = {k: v if len(v) > 1 else v[0] for k, v in compressed_fields.items()}
-    combined_fields = keep_fields | regulate_compressed
+    # regulate_compressed = {k: v if len(v) > 1 else v[0] for k, v in compressed_fields.items()}
+    # combined_fields = keep_fields | regulate_compressed
     
-    return pd.Series(combined_fields)
+    return pd.Series(keep_fields)
 
 
 
@@ -192,13 +197,35 @@ def compress_fields(input_series):
 
 # bad_cols = []
 
-# compressed_spells = spell_collection.apply(compress_fields, axis = 1)
-# compressed_spells.to_csv("compressed_spell_export.csv", index = False)
-
-# json_to_parquet_dir("2e Datasets/packs")
-
-print(pd.read_pickle("2eScrubbin/2e_master_parquet/spell.pkl").columns)
-print(pd.read_pickle("2eScrubbin/2e_master_parquet/vehicle.pkl").columns)
-print(pd.read_pickle("2eScrubbin/2e_master_parquet/class.pkl").columns)
 
 
+json_to_parquet_dir("2e Datasets/packs/spells")
+
+compressed_spells = pd.read_pickle("2eScrubbin/2e_master_parquet/spell.pkl")
+compressed_spells.to_csv("compressed_spell_export.csv", index = False)
+
+# spell parquet tables
+spell_main = {"id", "name", "level", "type", "rarity"}
+spell_damage = {"id", "damage_index", "damage", "damage_type", "persistent", "mod", "kind", "materials"}
+spell_meta = {"id", "source", "remaster", "license"}
+spell_details = {"id", "cost", "sustained", "duration", "range", "targets", "cast_time", "area-type", "area_range", "save", "basic", "description", "area_details", "requirements"}
+spell_heighten = {"id", "area", "interval", "heightening_type"}
+spell_heighten_int = {"id", "damage_formula", "damage_type", "persistent", "mod", "kind", "materials"}
+spell_heighten_lvl = {"id", "level", "area", "range", "target", "area_value", "area_type"}
+spell_heighten_lvl_dmg = {"id", "level", "damage", "damage_type", "persistent", "mod", "materials"}
+spell_traits = {"id", "trait"}
+spell_traditions = {"id", "tradition"}
+spell_ritual = {"id", "primary_check", "secondary_caster", "description", "secondary_check"}
+
+file = orjson.loads(<file path>.read())
+file_type = file.get('type')
+
+if file_type == "spell":
+    
+    sys = file.get('system', {})
+    dmg = sys.get('damage', {})
+    hi = sys.get('heightening', {})
+    rit = sys.get('ritual', {})
+
+
+    
