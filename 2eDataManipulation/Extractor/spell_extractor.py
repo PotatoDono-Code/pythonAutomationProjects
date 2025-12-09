@@ -1,5 +1,12 @@
 from .base_extractor import BaseExtractor
 
+def safe_int(val):
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+        return None
+
 class SpellExtractor(BaseExtractor):
     
     def extract_main(self):
@@ -16,7 +23,7 @@ class SpellExtractor(BaseExtractor):
         return {
             "id" : self.id,
             "name" : self.retrieve("name"),
-            "level" : self.retrieve("system", "level", "value"),
+            "level" : safe_int(self.retrieve("system", "level", "value")),
             "type" : spell_type,
             "rarity" : self.retrieve("system", "traits", "rarity")
         }
@@ -41,7 +48,7 @@ class SpellExtractor(BaseExtractor):
             "targets" : self.retrieve("system", "target", "value"),
             "cast_time" : self.retrieve("system", "time", "value"),
             "area_type" : self.retrieve("system", "area", "type"),
-            "area_range" : self.retrieve("system", "area", "value"),
+            "area_range" : safe_int(self.retrieve("system", "area", "value")),
             "save" : self.retrieve("system", "defense", "save", "statistic"),
             "basic" : self.retrieve("system", "defense", "save", "basic"),
             "description" : self.retrieve("system", "description", "value")
@@ -76,7 +83,7 @@ class SpellExtractor(BaseExtractor):
         return {
             "id" : self.id,
             "type" : self.retrieve("system", "heightening", "type"),
-            "interval" : self.retrieve("system", "heightening", "interval")
+            "interval" : safe_int(self.retrieve("system", "heightening", "interval"))
         }
     
     def extract_heighten_interval(self):
@@ -95,12 +102,7 @@ class SpellExtractor(BaseExtractor):
              results.append({
                 "id" : self.id,
                 "damage_index" : int_dmg_index,
-                "damage" : dmg.get("formula"),
-                "damage_type" : dmg.get("type"),
-                "persistent" : dmg.get("category"),
-                "mod" : dmg.get("applyMod"),
-                "kind" : dmg.get("kinds"),
-                "materials" : dmg.get("materials")    
+                "damage" : dmg
             })
         
         return results
@@ -127,7 +129,7 @@ class SpellExtractor(BaseExtractor):
                 "heighten_level" : level_block_index,
                 "area" : area.get("type"),
                 "area_type" : area.get("area_type"),
-                "area_value" : area.get("value"),
+                "area_value" : safe_int(area.get("value")),
                 "range" : (entry.get("range") or {}).get("value"),
                 "target" : (entry.get("target") or {}).get("value")
             })
@@ -199,7 +201,7 @@ class SpellExtractor(BaseExtractor):
         "traditions": self.extract_traditions(),
         "heightening": self.extract_heighten(),
         "heighten_interval": self.extract_heighten_interval(),
-        "heighten_levels": level,
+        "heighten_level": level,
         "heighten_level_damage": level_damage,
         "ritual": self.extract_ritual(),
     }

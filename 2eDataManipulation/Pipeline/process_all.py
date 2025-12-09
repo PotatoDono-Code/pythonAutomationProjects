@@ -2,8 +2,21 @@ import glob
 import orjson
 import os
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
+from pathlib import Path
+import traceback
 
 from Extractor.spell_extractor import SpellExtractor
+
+def data_to_table(table_file, table_rows):
+    table = pa.Table.from_pandas(pd.DataFrame(table_rows))
+
+    if not table_file.exists():
+        pq.write_table(table, table_file)
+    
+    with pq.ParquetWriter(table_file, table.schema, use_dictionary = True) as writer:
+        writer.write_table(table)
 
 extractor_reg = {
     "spell" : SpellExtractor,
@@ -12,12 +25,12 @@ extractor_reg = {
 def process_all(input_dir):
 
     master_table = {
-        "spells" : {
+        "spell" : {
             "main" : [],
             "meta" : [],
             "details" : [],
             "damage" : [],
-            "heighten": [],
+            "heightening": [],
             "heighten_interval" : [],
             "heighten_level" : [],
             "heighten_level_damage" : [],
@@ -27,7 +40,7 @@ def process_all(input_dir):
         }
     }
 
-    master_parq_dir = Path("../2eScrubbin/2e_master_parquet")
+    master_parq_dir = Path("2eDataManipulation/Content")
     master_parq_dir.mkdir(parents = True, exist_ok = True)
     metadata_dir = master_parq_dir/"metadata"
     metadata_dir.mkdir(parents = True, exist_ok = True)
@@ -57,12 +70,12 @@ def process_all(input_dir):
     for i, file_path in enumerate(json_files, 1):
         try:
             with open(file_path, "rb") as file:
-                read_file = orjson.loads(file_path.read())
-                if read_file['_id'] not in known_files['_id']:
-                    type_check = read_file.get("type")
+                read_file = orjson.loads(file.read())
+                if read_file['_id'] not in known_files:
+                    type_check = read_file['type']
                     
                     Extractor = extractor_reg[type_check]
-                    extracted_data = Extractor(read_file)
+                    extracted_data = Extractor(read_file).extract_all()
 
                     for sub_table, table_row in extracted_data.items():
                         
@@ -79,6 +92,37 @@ def process_all(input_dir):
                             raise TypeError(f"Unexepcted type: {type(table_row)} for table {target_table}")
                         
                     new_id_records.append({
-                        "_id" : extracted_data.get("_id"),
-                        "type" : extracted_data.get("type")
+                        "_id" : read_file['_id'],
+                        "type" : type_check
                     })
+
+                    updated += 1
+
+        except Exception as e:
+            print(f"{file_path} failed with :: {e}")
+            traceback.print_exc()
+
+        if (i%500) == 0:     
+            print(f"Processed Files: {i} of {file_count}")
+        
+    if updated > 0:
+        print(f"Beginning saving {updated} new files")
+
+        for types in master_table:
+            sub_table_dir = master_parq_dir/f"{types}"
+            sub_table_dir.mkdir(parents = True, exist_ok = True)
+            
+            for sub_tables in master_table[types]:
+                sub_table_file = sub_table_dir/f"{sub_tables}.parquet"
+           
+                data_to_table(sub_table_file, master_table[types][sub_tables])
+
+            print(f"Entry type <{types}> completed")
+
+
+        pd.concat([id_df, pd.DataFrame(new_id_records)]).to_pickle(id_check_path)
+
+    else: 
+        print("No new entries to process")
+
+        
