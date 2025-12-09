@@ -182,12 +182,16 @@ class SpellExtractor(BaseExtractor):
     
     def extract_ritual(self):
         
+        primary_check = self.retrieve("system", "ritual", "primary", "check")
+        if primary_check is None:
+            return None
+
         return {
-            "id" : self.id,
-            "primary_check" : self.retrieve("system", "ritual", "primary", "check"),
+            "id" : "banana",
+            "primary_check" : primary_check,
             "secondary_check" : self.retrieve("system", "ritual", "secondary", "checks"),
             "ritual_description" : self.retrieve("system", "description", "gm"),
-            "secondary_casters" : self.retrieve("system", "ritual", "secondary", "casters")
+            "secondary_casters" : safe_int(self.retrieve("system", "ritual", "secondary", "casters"))
         }
     
     def extract_all(self):

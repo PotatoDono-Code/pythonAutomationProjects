@@ -217,15 +217,15 @@ spell_traits = {"id", "trait"}
 spell_traditions = {"id", "tradition"}
 spell_ritual = {"id", "primary_check", "secondary_caster", "description", "secondary_check"}
 
-file = orjson.loads(<file path>.read())
-file_type = file.get('type')
+# file = orjson.loads(<file path>.read())
+# file_type = file.get('type')
 
-if file_type == "spell":
+# if file_type == "spell":
     
-    sys = file.get('system', {})
-    dmg = sys.get('damage', {})
-    hi = sys.get('heightening', {})
-    rit = sys.get('ritual', {})
+#     sys = file.get('system', {})
+#     dmg = sys.get('damage', {})
+#     hi = sys.get('heightening', {})
+#     rit = sys.get('ritual', {})
 
 
     
