@@ -187,7 +187,7 @@ class SpellExtractor(BaseExtractor):
             return None
 
         return {
-            "id" : "banana",
+            "id" : self.id,
             "primary_check" : primary_check,
             "secondary_check" : self.retrieve("system", "ritual", "secondary", "checks"),
             "ritual_description" : self.retrieve("system", "description", "gm"),
