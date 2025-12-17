@@ -61,10 +61,10 @@ class SpellExtractor(BaseExtractor):
         if not isinstance(damage_block, dict):
             return results
 
-        for dmg_index, dmg in damage_block.items():
+        for i, (_, dmg) in enumerate(damage_block.items()):
             results.append({
                 "id" : self.id,
-                "damage_index" : dmg_index,
+                "damage_index" : i,
                 "damage" : dmg.get("formula"),
                 "damage_type" : dmg.get("type"),
                 "persistent" : dmg.get("category"),
@@ -98,10 +98,10 @@ class SpellExtractor(BaseExtractor):
         if not isinstance(int_dmg_block, dict):
             return results
         
-        for int_dmg_index, dmg in int_dmg_block.items():
+        for i, (_, dmg) in enumerate(int_dmg_block.items()):
              results.append({
                 "id" : self.id,
-                "damage_index" : int_dmg_index,
+                "damage_index" : i,
                 "damage" : dmg
             })
         
@@ -139,11 +139,11 @@ class SpellExtractor(BaseExtractor):
             if not isinstance(level_dmg_block, dict):
                 continue
 
-            for dmg_index, dmg in level_dmg_block.items():
+            for i, (_, dmg) in enumerate(level_dmg_block.items()):
                 damage_results.append({
                     "id" : self.id,
                     "heighten_level" : level_block_index,
-                    "damage_index" : dmg_index,
+                    "damage_index" : i,
                     "damage" : dmg.get("formula"),
                     "damage_type" : dmg.get("type"),
                     "persistent" : dmg.get("category"),

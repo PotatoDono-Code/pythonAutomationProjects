@@ -1,9 +1,14 @@
 from Pipeline.process_all import process_all
 import pandas as pd
+import glob
+import os
 
-process_all("2e Datasets/packs/spells")
+# process_all("2e Datasets/packs/ancestries")
+input_dir = ("2eDataManipulation/Content/ancestry")
 
-test = pd.read_parquet("2eDataManipulation/Content/spell/ritual.parquet")
+json_files = glob.glob(os.path.join(input_dir, "**/*.parquet"), recursive = True)
 
-test = test.sort_values('secondary_casters', ascending= True)
-print(test)
+for each in json_files:
+    test = pd.read_parquet(each)
+    print(f"-------{each}-------")
+    print(test)

@@ -8,6 +8,7 @@ from pathlib import Path
 import traceback
 
 from Extractor.spell_extractor import SpellExtractor
+from Extractor.ancestry_extractor import AncestryExtractor
 
 def data_to_table(table_file, table_rows):
     table = pa.Table.from_pandas(pd.DataFrame(table_rows))
@@ -20,11 +21,22 @@ def data_to_table(table_file, table_rows):
 
 extractor_reg = {
     "spell" : SpellExtractor,
+    "ancestry" : AncestryExtractor
 }
 
 def process_all(input_dir):
 
     master_table = {
+        "ancestry" : {
+            "main": [],
+            "meta": [],
+            "boosts": [],
+            "flaw": [],
+            "traits": [],
+            "languages":[],
+            "additional_languages": [],
+            "race_features": []
+        },
         "spell" : {
             "main" : [],
             "meta" : [],

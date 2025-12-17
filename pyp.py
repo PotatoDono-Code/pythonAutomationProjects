@@ -1,3 +1,0 @@
-import pyppeteer
-
-pyppeteer-install
