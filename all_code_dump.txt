@@ -1,0 +1,765 @@
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Data_Ingest\repo_ingest.py
+
+from git import Repo
+import os
+
+# -- Target the directory for the 2e Data Repo
+rd = "2e Datasets"
+
+# -- Either clone from scratch or update. Only deal with files listed in the 'packs' subfolder
+if not os.path.exists(rd):
+    repo = Repo.clone_from("https://github.com/foundryvtt/pf2e.git", rd, no_checkout = True, branch="release")
+    print(f"Creating directory from Foundry VTT Repo")
+else:
+    repo = Repo(rd)
+    print(f"Updating directory from Foundry VTT Repo")
+
+
+git_cmd = repo.git
+git_cmd.sparse_checkout('init', '--cone')
+git_cmd.sparse_checkout('set', 'packs')
+git_cmd.checkout('release')
+
+print(f"File directory complete and ready for use")
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Extractor\__init__.py
+
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Extractor\ancestry_extractor.py
+
+from .base_extractor import BaseExtractor
+
+def safe_int(val):
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+        return None
+
+class AncestryExtractor(BaseExtractor):
+    
+    def extract_main(self):
+
+        return {
+            "id" : self.id,
+            "name" : self.retrieve("name"),
+            "type" : "ancestry",
+            "rarity" : self.retrieve("system", "traits", "rarity"),
+            "description" : self.retrieve("system", "description", "value"),
+            "hp" : safe_int(self.retrieve("system", "hp")),
+            "reach" : safe_int(self.retrieve("system", "reach")),
+            "size" : self.retrieve("system", "size"),
+            "speed" : safe_int(self.retrieve("system", "speed")),
+            "vision" : self.retrieve("system", "vision"),
+            "bonus_language_count" : self.retrieve("system", "additionalLanguages", "count")
+        }
+    
+    def extract_meta(self):
+
+        return {
+            "id" : self.id,
+            "source" : self.retrieve("system", "publication", "title"),
+            "remaster" : self.retrieve("system", "publication", "remaster"),
+            "license" : self.retrieve("system", "publication", "license")
+        }
+    
+    def extract_flaw(self):
+        
+        flaw = self.retrieve("system", "flaws", "0", "value")
+        if not flaw:
+            return None
+        
+        return {
+            "id" : self.id,
+            "flaw" : flaw[0]
+        }
+
+    def extract_boosts(self):
+        results = []
+
+        boost_block = self.sys.get("boosts", {}) or {}
+        if not isinstance(boost_block, dict):
+            return results
+
+        for i, (_, boost) in enumerate(boost_block.items()):
+            boost_stat = boost.get("value")
+            if not boost_stat:
+                i -= 1
+                continue
+            
+            if len(boost_stat) > 1:
+                boost_value = "free"
+            else:
+                boost_value = boost_stat[0]
+
+            results.append({
+                "id" : self.id,
+                "boost_index" : i,
+                "stat" : boost_value
+            })
+        
+        return results
+    
+    def extract_languages(self):
+        results = []
+
+        language_list = self.retrieve("system", "languages", "value") or []
+        
+        for each in language_list:
+            results.append({
+                "id" : self.id,
+                "language" : each
+            })
+
+        return results
+
+    def extract_additional_languages(self):
+        results = []
+
+        additional_language_list = self.retrieve("system", "additionalLanguages", "value") or []
+        
+        for each in additional_language_list:
+            results.append({
+                "id" : self.id,
+                "language" : each
+            })
+
+        return results
+    
+    def extract_race_features(self):
+        results = []
+
+        feature_block = self.sys.get("items", {}) or {}
+        if not isinstance(feature_block, dict):
+            return results
+        
+        for i, (_, feature) in enumerate(feature_block.items()):
+            results.append({
+                "id" : self.id,
+                "feature_index" : i,
+                "feature" : feature.get("name")
+            })
+        
+        return results
+        
+    def extract_traits(self):
+        results = []
+
+        traits_list = self.retrieve("system", "traits", "value") or []
+
+        for each in traits_list:
+            results.append({
+                "id" : self.id,
+                "trait" : each
+            })
+
+        return results
+    
+    def extract_all(self):
+        return {
+        "main": self.extract_main(),
+        "meta": self.extract_meta(),
+        "boosts": self.extract_boosts(),
+        "flaw": self.extract_flaw(),
+        "traits": self.extract_traits(),
+        "languages": self.extract_languages(),
+        "additional_languages": self.extract_additional_languages(),
+        "race_features": self.extract_race_features()
+    }
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Extractor\base_extractor.py
+
+
+## -  Universal extractor method for use in subsequent extractors
+
+class BaseExtractor:
+    
+    ## - Initialize with full json file, system nested data, and unique _id field
+    def __init__ (self, obj):
+        self.obj = obj
+        self.sys = obj.get("system", {})
+        self.id = obj.get("_id")
+
+    ## - Getter method to retrieve data in nested json cleanly
+    def retrieve(self, *path):
+
+        step = self.obj
+
+        for each in path:
+            if not isinstance(step, dict):
+                return None
+            step = step.get(each)
+        
+        return step
+    
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Extractor\extractor_registry.py
+
+from Extractor.spell_extractor import SpellExtractor
+from Extractor.ancestry_extractor import AncestryExtractor
+
+EXTRACTOR_REGISTRY = {
+    "spell" : SpellExtractor,
+    "ancestry" : AncestryExtractor
+}
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Extractor\spell_extractor.py
+
+from .base_extractor import BaseExtractor
+
+def safe_int(val):
+        if isinstance(val, int):
+            return val
+        if isinstance(val, str) and val.isdigit():
+            return int(val)
+        return None
+
+class SpellExtractor(BaseExtractor):
+    
+    def extract_main(self):
+        spell_type = self.retrieve("type")
+        traits = self.retrieve("system", "traits", "value") or []
+
+
+        if self.retrieve("system", "ritual"):
+            spell_type = "ritual"
+        elif "focus" in traits:
+            spell_type = "focus"
+
+
+        return {
+            "id" : self.id,
+            "name" : self.retrieve("name"),
+            "level" : safe_int(self.retrieve("system", "level", "value")),
+            "type" : spell_type,
+            "rarity" : self.retrieve("system", "traits", "rarity")
+        }
+    
+    def extract_meta(self):
+
+        return {
+            "id" : self.id,
+            "source" : self.retrieve("system", "publication", "title"),
+            "remaster" : self.retrieve("system", "publication", "remaster"),
+            "license" : self.retrieve("system", "publication", "license")
+        }
+    
+    def extract_details(self):
+
+        return {
+            "id" : self.id,
+            "cost" : self.retrieve("system", "cost", "value"),
+            "sustained" : self.retrieve("system", "duration", "sustained"),
+            "duration" : self.retrieve("system", "duration", "value"),
+            "range" : self.retrieve("system", "range", "value"),
+            "targets" : self.retrieve("system", "target", "value"),
+            "cast_time" : self.retrieve("system", "time", "value"),
+            "area_type" : self.retrieve("system", "area", "type"),
+            "area_range" : safe_int(self.retrieve("system", "area", "value")),
+            "save" : self.retrieve("system", "defense", "save", "statistic"),
+            "basic" : self.retrieve("system", "defense", "save", "basic"),
+            "description" : self.retrieve("system", "description", "value")
+        }
+    
+    def extract_damage(self):
+        results = []
+
+        damage_block = self.sys.get("damage", {}) or {}
+        if not isinstance(damage_block, dict):
+            return results
+
+        for i, (_, dmg) in enumerate(damage_block.items()):
+            results.append({
+                "id" : self.id,
+                "damage_index" : i,
+                "damage" : dmg.get("formula"),
+                "damage_type" : dmg.get("type"),
+                "persistent" : dmg.get("category"),
+                "mod" : dmg.get("applyMod"),
+                "kind" : dmg.get("kinds"),
+                "materials" : dmg.get("materials")    
+            })
+
+        return results
+    
+    def extract_heighten(self):
+        h = self.sys.get("heightening", {}) or {}
+        if not h:
+            return None
+        
+        return {
+            "id" : self.id,
+            "type" : self.retrieve("system", "heightening", "type"),
+            "interval" : safe_int(self.retrieve("system", "heightening", "interval"))
+        }
+    
+    def extract_heighten_interval(self):
+        results = []
+
+        interval_block = self.sys.get("heightening", {}) or {}
+
+        if interval_block.get("type") != "interval":
+            return results
+        
+        int_dmg_block = interval_block.get("damage", {}) or {}
+        if not isinstance(int_dmg_block, dict):
+            return results
+        
+        for i, (_, dmg) in enumerate(int_dmg_block.items()):
+             results.append({
+                "id" : self.id,
+                "damage_index" : i,
+                "damage" : dmg
+            })
+        
+        return results
+    
+    def extract_heighten_level(self):
+        results = []
+        damage_results = []
+
+        heighten = self.sys.get("heightening", {}) or {}
+
+        if heighten.get("type") == "interval":
+            return results, damage_results
+
+        level_block = heighten.get("levels", {}) or {}
+        
+        if not isinstance(level_block, dict):
+            return results, damage_results
+        
+        for level_block_index, entry in level_block.items():
+            area = entry.get("area", {}) or {}
+
+            results.append({
+                "id" : self.id,
+                "heighten_level" : level_block_index,
+                "area" : area.get("type"),
+                "area_type" : area.get("area_type"),
+                "area_value" : safe_int(area.get("value")),
+                "range" : (entry.get("range") or {}).get("value"),
+                "target" : (entry.get("target") or {}).get("value")
+            })
+
+            level_dmg_block = entry.get("damage", {}) or {}
+
+            if not isinstance(level_dmg_block, dict):
+                continue
+
+            for i, (_, dmg) in enumerate(level_dmg_block.items()):
+                damage_results.append({
+                    "id" : self.id,
+                    "heighten_level" : level_block_index,
+                    "damage_index" : i,
+                    "damage" : dmg.get("formula"),
+                    "damage_type" : dmg.get("type"),
+                    "persistent" : dmg.get("category"),
+                    "mod" : dmg.get("applyMod"),
+                    "kind" : dmg.get("kinds"),
+                    "materials" : dmg.get("materials")
+                })
+
+        return results, damage_results
+
+    def extract_traits(self):
+        results = []
+
+        traits_list = self.sys.get("traits").get("value") or []
+
+        for each in traits_list:
+            results.append({
+                "id" : self.id,
+                "trait" : each
+            })
+
+        return results
+    
+    def extract_traditions(self):
+        results = []
+
+        trad = self.sys.get("traits").get("traditions") or []
+
+        for each in trad:
+            results.append({
+                "id" : self.id,
+                "tradition" : each
+            })
+
+        return results
+    
+    def extract_ritual(self):
+        
+        primary_check = self.retrieve("system", "ritual", "primary", "check")
+        if primary_check is None:
+            return None
+
+        return {
+            "id" : self.id,
+            "primary_check" : primary_check,
+            "secondary_check" : self.retrieve("system", "ritual", "secondary", "checks"),
+            "ritual_description" : self.retrieve("system", "description", "gm"),
+            "secondary_casters" : safe_int(self.retrieve("system", "ritual", "secondary", "casters"))
+        }
+    
+    def extract_all(self):
+        level, level_damage = self.extract_heighten_level()
+        return {
+        "main": self.extract_main(),
+        "meta": self.extract_meta(),
+        "details": self.extract_details(),
+        "damage": self.extract_damage(),
+        "traits": self.extract_traits(),
+        "traditions": self.extract_traditions(),
+        "heightening": self.extract_heighten(),
+        "heighten_interval": self.extract_heighten_interval(),
+        "heighten_level": level,
+        "heighten_level_damage": level_damage,
+        "ritual": self.extract_ritual(),
+    }
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Ledger\ledger.py
+
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\main.py
+
+from Pipeline.process_all import process_all
+
+process_all("2e Datasets/packs/ancestries")
+process_all("2e Datasets/packs/spells")
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Pipeline\__init__.py
+
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Pipeline\accumulator.py
+
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Pipeline\process_all.py
+
+import glob
+import os
+import pandas as pd
+from pathlib import Path
+from Schema.schema_registry import TYPE_REGISTRY
+from Extractor.extractor_registry import EXTRACTOR_REGISTRY
+from Pipeline.process_item import process_item_file
+from Pipeline.writer import write_master_table, write_ledger_file
+from datetime import datetime, timezone
+from Ledger.ledger import add_ledger_event
+
+def process_all(input_dir):
+
+    extractor_reg = {
+        extractor_name: extractor
+        for extractor_name, extractor in EXTRACTOR_REGISTRY.items()
+    }
+
+    ledger_events = []
+    processed_entities = []
+    batch_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+
+    master_table = {
+        type_name: {
+            table_name: []
+            for table_name in relations
+        }
+        for type_name, relations in TYPE_REGISTRY.items()
+    }
+
+    master_parq_dir = Path("2eDataManipulation/Content")
+    master_parq_dir.mkdir(parents = True, exist_ok = True)
+
+    metadata_dir = master_parq_dir/"metadata"
+    metadata_dir.mkdir(parents = True, exist_ok = True)
+    
+    # Create Variable to keep track of how many entries are updated.
+    updated = 0
+
+    # Pull all of the file paths to use for the traversing and converting to dataframe information
+    # Pull the number of files to use as a counting reference
+    json_files = glob.glob(os.path.join(input_dir, "**/*.json"), recursive = True)
+    file_count = len(json_files)
+
+    for i, file_path in enumerate(json_files, 1):
+        try:
+            new_record = process_item_file(
+                i_file_path = file_path, 
+                i_extractor_registry = extractor_reg,
+                i_master_table = master_table,
+                i_ledger = ledger_events, 
+                i_processed_entities = processed_entities, 
+                i_batch_id = batch_id
+            )
+
+            if new_record:
+                updated += 1
+
+        except Exception as e:
+            print(f"{file_path} failed with :: {e}")
+
+        if (i%500) == 0:     
+            print(f"Processed Files: {i} of {file_count}")
+        
+    if updated > 0:
+        print(f"Beginning saving {updated} new files")
+
+        try:
+            write_master_table(
+                i_master_table = master_table, 
+                i_master_parq_dir = master_parq_dir,
+                i_batch_id = batch_id 
+            )
+        
+        except Exception:
+            for entity in processed_entities:
+                add_ledger_event(
+                    i_ledger = ledger_events, 
+                    i_batch_id = batch_id, 
+                    i_entity_id = entity["entity_id"], 
+                    i_entity_type = entity["entity_type"], 
+                    i_entity_hash = entity["entity_hash"], 
+                    i_state = "FAILED"
+                )
+            raise
+        
+        else: 
+            for entity in processed_entities:
+                add_ledger_event(
+                    i_ledger = ledger_events, 
+                    i_batch_id = batch_id, 
+                    i_entity_id = entity["entity_id"], 
+                    i_entity_type = entity["entity_type"], 
+                    i_entity_hash = entity["entity_hash"], 
+                    i_state = "COMMITTED"
+                )
+
+        write_ledger_file(
+            i_ledger = ledger_events, 
+            i_metadata_dir = metadata_dir, 
+            i_batch_id = batch_id
+        )    
+                
+    else: 
+        print("No new entries to process")
+
+        
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Pipeline\process_item.py
+
+import orjson
+import hashlib
+from Ledger.ledger import add_ledger_event
+
+def process_item_file(i_file_path, i_extractor_registry, i_master_table, i_ledger, i_processed_entities, i_batch_id):
+    with open(i_file_path, "rb") as file:
+        read_file = orjson.loads(file.read())
+
+        if not isinstance(read_file, dict):
+            return False
+
+        if '_id' not in read_file or 'type' not in read_file:
+            return False  
+          
+        raw_bytes = file.read()
+        entity_hash = hashlib.sha256(raw_bytes).hexdigest()
+        id_check = read_file['_id']
+        type_check = read_file['type']
+
+        add_ledger_event(
+            i_ledger = i_ledger, 
+            i_batch_id = i_batch_id, 
+            i_entity_id = id_check, 
+            i_entity_type = type_check, 
+            i_entity_hash = entity_hash, 
+            i_state = "IN_PROGRESS"
+        )
+
+        i_processed_entities.append({
+            "entity_id" : id_check,
+            "entity_type" : type_check,
+            "entity_hash" : entity_hash
+        })
+        
+        Extractor = i_extractor_registry[type_check]
+        extracted_data = Extractor(read_file).extract_all()
+
+        for sub_table, table_row in extracted_data.items():
+            if table_row is None:
+                continue
+
+            target_table = i_master_table[type_check][sub_table]
+
+            if isinstance(table_row, dict):
+                target_table.append(table_row)
+
+            elif isinstance(table_row, list):
+                target_table.extend(table_row)
+
+            else:
+                raise TypeError(f"Unexpected type: {type(table_row)} for table {target_table}")
+
+        return True
+                
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Pipeline\writer.py
+
+import pyarrow as pa
+import pandas as pd
+import pyarrow.parquet as pq
+from pathlib import Path
+
+def batch_to_file(relational_dir, table_rows, relational_name, batch_id):
+    table = pa.Table.from_pandas(pd.DataFrame(table_rows))
+    relational_dir.mkdir(parents = True, exist_ok = True)
+        
+    with pq.ParquetWriter(f"{relational_dir}/{batch_id}--{relational_name}", table.schema, use_dictionary = True) as writer:
+        writer.write_table(table)
+
+def write_ledger_file(i_ledger, i_metadata_dir, i_batch_id):
+    table = pa.Table.from_pandas(pd.DataFrame(i_ledger))
+    event_dir = i_metadata_dir/"ledger"
+    event_dir.mkdir(parents = True, exist_ok = True)
+
+    with pq.ParquetWriter(f"{event_dir}/Batch--{i_batch_id}", table.schema, use_dictionary = True) as writer:
+         writer.write_table(table)
+
+def write_master_table(i_master_table, i_master_parq_dir, i_id_df, i_new_id_records, i_id_check_path):
+    batch_id = generate_batch_id()
+
+
+
+    for types in i_master_table:
+            sub_table_dir = i_master_parq_dir/f"{types}"
+            sub_table_dir.mkdir(parents = True, exist_ok = True)
+            
+            for sub_tables in i_master_table[types]:
+                rows = i_master_table[types][sub_tables]
+                if not rows:
+                    continue
+                relational_table_dir = sub_table_dir/f"{sub_tables}"        
+                batch_to_file(relational_table_dir, i_master_table[types][sub_tables], sub_tables, batch_id)
+
+            print(f"Entry type <{types}> completed")
+
+
+    pd.concat([i_id_df, pd.DataFrame(i_new_id_records)]).to_pickle(i_id_check_path)
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Schema\__init__.py
+
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\2eDataManipulation\Schema\schema_registry.py
+
+TYPE_REGISTRY = {
+        "ancestry" : {
+            "main": {"kind" : "one"},
+            "meta": {"kind" : "one"},
+            "boosts": {"kind" : "many"},
+            "flaw": {"kind" : "one"},
+            "traits": {"kind" : "many"},
+            "languages":{"kind" : "many"},
+            "additional_languages": {"kind" : "many"},
+            "race_features": {"kind" : "many"}
+        },
+        "spell" : {
+            "main" : {"kind" : "one"},
+            "meta" : {"kind" : "one"},
+            "details" : {"kind" : "one"},
+            "damage" : {"kind" : "many"},
+            "heightening": {"kind" : "one"},
+            "heighten_interval" : {"kind" : "many"},
+            "heighten_level" : {"kind" : "many"},
+            "heighten_level_damage" : {"kind" : "many"},
+            "traits" : {"kind" : "many"},
+            "traditions" : {"kind" : "many"},
+            "ritual" : {"kind" : "one"}
+        }
+    }
+
+
+
+### FILE: C:\Users\Haru\2eSearchAPI\searchAPI\search_main.py
+
+from fastapi import FastAPI, Query
+import pandas as pd
+import json
+
+app = FastAPI()
+df = pd.read_pickle("../2eScrubbin/2e_master_pickle.pkl")
+
+def filter_by_value(input_df, key = str, search_value = str):
+    filtered_df = input_df[input_df[key].str.lower() == search_value.lower()]
+    filtered_df = filtered_df.dropna(axis = 1, how = 'all')
+    return filtered_df
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the search API" }
+
+@app.get("/all_type")
+def return_all_by_type(value:str):
+    if value in df['type'].unique():
+        result = filter_by_value(df, 'type', value).to_json(orient = 'records')
+        return json.loads(result)
+    else:
+        return {"error": "No entries matching that type"}
+
+# system.defense.save.statistic - save type
+# system.trait.tradition - spell tradition
+# system.trait.value - spell traits (used to identify cantrip as well)
+# system.level.value - spell level
+@app.get("/spell_filter")
+def complete_spell_filter(tradition: str = None, level: int = None, trait: str = None, spell_rarity: str = None, save: str = None):
+    mask = pd.Series(True, index = df.index)
+    
+    if tradition:
+        mask &= df['system.traits.traditions'] == tradition
+    if level is not None:
+        if level > 1:
+            mask &= df['system.level.value'] == level
+        elif level == 1:
+            mask &= (df['system.level.value'] == level) & (~df['system.traits.value'].apply(lambda traits: isinstance(traits, (list, str)) and "cantrip" in traits))
+        elif level == 0:
+            mask &= df['system.traits.value'].apply(lambda traits: isinstance(traits, (list, str)) and "cantrip" in traits)
+        else:
+            return {"error": "Invalid Spell Level Entry"}
+    if trait:
+        mask &= df['system.traits.value'].apply(lambda traits: isinstance(traits, (list, str)) and trait in traits)
+    if spell_rarity:
+        mask &= df['system.traits.rarity'] == spell_rarity
+    if save:
+        mask &= df['system.defense.save.statistic'] == save
+
+    query_df = df[mask].dropna(axis = 1, how = "all").to_json(orient = "records")
+
+    return json.loads(query_df)
+
+
+
